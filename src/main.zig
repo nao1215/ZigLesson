@@ -1,24 +1,28 @@
 const std = @import("std");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // don't forget to flush!
+    std.debug.print("Arguments: {s}\n", .{args});
+    try printFileStdout();
 }
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+pub fn printFileStdout() !void {
+    const file = try std.fs.cwd().openFile("README.md", .{});
+    defer file.close();
+
+    var reader = std.io.bufferedReader(file.reader());
+    const in_stream = reader.reader();
+    const allocator = std.heap.page_allocator;
+    const file_size = try file.getEndPos();
+    const contents = try in_stream.readAllAlloc(allocator, file_size);
+    defer allocator.free(contents);
+
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("read file value: {c}\n", .{contents});
 }
